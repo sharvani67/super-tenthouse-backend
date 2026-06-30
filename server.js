@@ -4,6 +4,7 @@ const express = require("express");
 const loginRoutes = require("./routes/loginRoutes");
 const productRoutes = require("./routes/productRoute");
 const categoryRoutes = require("./routes/categoryRoute");
+const customerRoutes = require("./routes/Customerlogin");
 
 const cors = require("cors");
 const path = require("path");
@@ -42,6 +43,8 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/admin", loginRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/customers", customerRoutes);
+
 
 app.listen(5000, () => {
   console.log("🚀 Server running on port 5000");
