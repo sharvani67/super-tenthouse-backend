@@ -103,4 +103,22 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.get("/all", async (req, res) => {
+  try {
+    const customers = await query(
+      "SELECT id, name, email, phone, created_at FROM customers ORDER BY id DESC"
+    );
+
+    res.json({
+      message: "Customers fetched successfully",
+      count: customers.length,
+      data: customers,
+    });
+
+  } catch (error) {
+    console.error("GET CUSTOMERS ERROR:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;
