@@ -5,6 +5,8 @@ const loginRoutes = require("./routes/loginRoutes");
 const productRoutes = require("./routes/productRoute");
 const categoryRoutes = require("./routes/categoryRoute");
 const customerRoutes = require("./routes/Customerlogin");
+const userRoutes = require("./routes/userRoute");
+
 
 const cors = require("cors");
 const path = require("path");
@@ -43,6 +45,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/admin", loginRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/customers", userRoutes);
 app.use("/api/customers", customerRoutes);
 
 
