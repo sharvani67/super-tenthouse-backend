@@ -19,7 +19,8 @@
     "multer": "^2.2.0",
     "mysql": "^2.18.1",
     "mysql2": "^3.22.5",
-    "nodemailer": "^9.0.2",
-    "otp-generator": "^4.0.1"
+    "nodemailer": "^9.0.3",
+    "otp-generator": "^4.0.1",
+    "react-native-reanimated": "^3.16.0"
   }
 }
