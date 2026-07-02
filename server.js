@@ -5,6 +5,7 @@ const loginRoutes = require("./routes/loginRoutes");
 const productRoutes = require("./routes/productRoute");
 const categoryRoutes = require("./routes/categoryRoute");
 const customerRoutes = require("./routes/Customerlogin");
+const cartRoutes = require("./routes/CartRoute");
 
 const cors = require("cors");
 const path = require("path");
@@ -44,7 +45,7 @@ app.use("/api/admin", loginRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/customers", customerRoutes);
-
+app.use("/api", cartRoutes);
 
 app.listen(5000, () => {
   console.log("🚀 Server running on port 5000");
