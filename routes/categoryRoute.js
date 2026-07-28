@@ -28,17 +28,38 @@ router.post("/", (req, res) => {
 // ==============================
 // GET ALL CATEGORIES
 // ==============================
+// router.get("/", (req, res) => {
+//   const sql = `
+//     SELECT * FROM product_categories
+//     ORDER BY id DESC
+//   `;
+
+//   db.query(sql, (err, result) => {
+//     if (err) {
+//       return res.status(500).json(err);
+//     }
+
+//     res.json(result);
+//   });
+// });
+
+
+// routes/categories.js - Add product count
 router.get("/", (req, res) => {
   const sql = `
-    SELECT * FROM product_categories
-    ORDER BY id DESC
+    SELECT 
+      c.*,
+      COUNT(p.id) as product_count
+    FROM product_categories c
+    LEFT JOIN products p ON p.product_category_id = c.id
+    GROUP BY c.id
+    ORDER BY c.id DESC
   `;
 
   db.query(sql, (err, result) => {
     if (err) {
       return res.status(500).json(err);
     }
-
     res.json(result);
   });
 });
