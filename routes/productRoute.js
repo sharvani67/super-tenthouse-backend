@@ -290,12 +290,10 @@ router.get("/category/:categoryId", (req, res) => {
   const { categoryId } = req.params;
   console.log(`GET /api/products/category/${categoryId} - Fetching products by category`);
 
-  // Validate categoryId
   if (!categoryId) {
     return res.status(400).json({ error: "Category ID is required" });
   }
 
-  // Check if it's a number
   if (isNaN(categoryId)) {
     console.log("Invalid category ID:", categoryId);
     return res.status(400).json({ error: "Invalid category ID" });
@@ -449,7 +447,6 @@ router.get("/:id", (req, res) => {
   const productId = req.params.id;
   console.log(`GET /api/products/${productId} - Fetching single product`);
 
-  // Check if the ID is a number
   if (!productId || isNaN(productId)) {
     console.log("Invalid product ID:", productId);
     return res.status(400).json({ error: "Invalid product ID" });
@@ -510,7 +507,7 @@ router.get("/:id", (req, res) => {
 // ====================================
 // UPDATE PRODUCT
 // ====================================
-router.put("/:id", (req, res) => {
+router.put("/:id", upload.array("images", 10), (req, res) => {
   const id = req.params.id;
 
   const {
@@ -530,6 +527,7 @@ router.put("/:id", (req, res) => {
     material,
     care_instructions,
     is_active,
+    existing_images,
   } = req.body;
 
   if (!product_category_id) {
@@ -539,60 +537,310 @@ router.put("/:id", (req, res) => {
     return res.status(400).json({ error: "Product name is required" });
   }
 
-  const sql = `
-    UPDATE products
-    SET
-      product_category_id = ?,
-      product_name = ?,
-      product_code = ?,
-      product_brand = ?,
-      price = ?,
-      available_stock = ?,
-      dimensions = ?,
-      specifications = ?,
-      weight = ?,
-      color = ?,
-      discount = ?,
-      product_description = ?,
-      warranty = ?,
-      material = ?,
-      care_instructions = ?,
-      is_active = ?
-    WHERE id = ?
-  `;
-
-  db.query(
-    sql,
-    [
-      product_category_id || null,
-      product_name.trim(),
-      product_code || null,
-      product_brand || null,
-      parseFloat(price) || 0,
-      parseInt(available_stock) || 0,
-      dimensions || null,
-      specifications || null,
-      weight || null,
-      color || null,
-      parseFloat(discount) || 0,
-      product_description || null,
-      warranty || null,
-      material || null,
-      care_instructions || null,
-      is_active || 1,
-      id,
-    ],
-    (err) => {
-      if (err) {
-        console.error("Error updating product:", err);
-        return res.status(500).json({ error: err.message });
-      }
-
-      res.json({
-        message: "Product updated successfully",
-      });
+  // Begin transaction
+  db.beginTransaction((err) => {
+    if (err) {
+      console.error("Error starting transaction:", err);
+      return res.status(500).json({ error: err.message });
     }
-  );
+
+    // Update product details
+    const sql = `
+      UPDATE products
+      SET
+        product_category_id = ?,
+        product_name = ?,
+        product_code = ?,
+        product_brand = ?,
+        price = ?,
+        available_stock = ?,
+        dimensions = ?,
+        specifications = ?,
+        weight = ?,
+        color = ?,
+        discount = ?,
+        product_description = ?,
+        warranty = ?,
+        material = ?,
+        care_instructions = ?,
+        is_active = ?
+      WHERE id = ?
+    `;
+
+    db.query(
+      sql,
+      [
+        product_category_id || null,
+        product_name.trim(),
+        product_code || null,
+        product_brand || null,
+        parseFloat(price) || 0,
+        parseInt(available_stock) || 0,
+        dimensions || null,
+        specifications || null,
+        weight || null,
+        color || null,
+        parseFloat(discount) || 0,
+        product_description || null,
+        warranty || null,
+        material || null,
+        care_instructions || null,
+        is_active || 1,
+        id,
+      ],
+      (err) => {
+        if (err) {
+          console.error("Error updating product:", err);
+          return db.rollback(() => {
+            res.status(500).json({ error: err.message });
+          });
+        }
+
+        // Handle images
+        let existingImagesArray = [];
+        if (existing_images) {
+          existingImagesArray = Array.isArray(existing_images) ? existing_images : [existing_images];
+        }
+
+        // If we have new images, add them
+        if (req.files && req.files.length > 0) {
+          // Check if sort_order column exists
+          db.query("SHOW COLUMNS FROM product_images LIKE 'sort_order'", (colErr, columns) => {
+            const hasSortOrder = columns && columns.length > 0;
+            
+            // Delete existing images that are not in the keep list
+            db.query(
+              "SELECT image_url FROM product_images WHERE product_id = ?",
+              [id],
+              (selectErr, images) => {
+                if (selectErr) {
+                  console.error("Error fetching images:", selectErr);
+                  return db.rollback(() => {
+                    res.status(500).json({ error: selectErr.message });
+                  });
+                }
+
+                // Delete images not in keep list
+                const imagesToDelete = images.filter(function(img) {
+                  return !existingImagesArray.includes(img.image_url);
+                });
+
+                if (imagesToDelete.length > 0) {
+                  const deleteValues = imagesToDelete.map(function(img) {
+                    return img.image_url;
+                  });
+                  
+                  // Create placeholders for the IN clause
+                  const placeholders = deleteValues.map(function() {
+                    return '?';
+                  }).join(',');
+                  
+                  const deleteSql = `
+                    DELETE FROM product_images 
+                    WHERE product_id = ? AND image_url IN (${placeholders})
+                  `;
+                  
+                  db.query(
+                    deleteSql,
+                    [id].concat(deleteValues),
+                    function(deleteErr) {
+                      if (deleteErr) {
+                        console.error("Error deleting images:", deleteErr);
+                        return db.rollback(function() {
+                          res.status(500).json({ error: deleteErr.message });
+                        });
+                      }
+                    }
+                  );
+                }
+
+                // Add new images
+                if (hasSortOrder) {
+                  db.query(
+                    "SELECT MAX(sort_order) as max_order FROM product_images WHERE product_id = ?",
+                    [id],
+                    (orderErr, orderResult) => {
+                      if (orderErr) {
+                        console.error("Error getting sort order:", orderErr);
+                        return db.rollback(() => {
+                          res.status(500).json({ error: orderErr.message });
+                        });
+                      }
+                      const startOrder = (orderResult[0].max_order || -1) + 1;
+                      
+                      const values = req.files.map((file, index) => [
+                        id,
+                        `uploads/products/${file.filename}`,
+                        startOrder + index,
+                      ]);
+
+                      const insertSql = `
+                        INSERT INTO product_images
+                        (product_id, image_url, sort_order)
+                        VALUES ?
+                      `;
+
+                      db.query(insertSql, [values], (insertErr) => {
+                        if (insertErr) {
+                          console.error("Error saving images:", insertErr);
+                          return db.rollback(() => {
+                            res.status(500).json({ error: insertErr.message });
+                          });
+                        }
+                        
+                        db.commit((commitErr) => {
+                          if (commitErr) {
+                            console.error("Error committing transaction:", commitErr);
+                            return db.rollback(() => {
+                              res.status(500).json({ error: commitErr.message });
+                            });
+                          }
+                          res.json({
+                            message: "Product updated successfully",
+                          });
+                        });
+                      });
+                    }
+                  );
+                } else {
+                  const values = req.files.map((file) => [
+                    id,
+                    `uploads/products/${file.filename}`,
+                  ]);
+
+                  const insertSql = `
+                    INSERT INTO product_images
+                    (product_id, image_url)
+                    VALUES ?
+                  `;
+
+                  db.query(insertSql, [values], (insertErr) => {
+                    if (insertErr) {
+                      console.error("Error saving images:", insertErr);
+                      return db.rollback(() => {
+                        res.status(500).json({ error: insertErr.message });
+                      });
+                    }
+                    
+                    db.commit((commitErr) => {
+                      if (commitErr) {
+                        console.error("Error committing transaction:", commitErr);
+                        return db.rollback(() => {
+                          res.status(500).json({ error: commitErr.message });
+                        });
+                      }
+                      res.json({
+                        message: "Product updated successfully",
+                      });
+                    });
+                  });
+                }
+              }
+            );
+          });
+        } else {
+          // No new images, just update existing images if any need to be removed
+          if (existingImagesArray.length === 0) {
+            // Delete all images if no images are kept
+            db.query(
+              "DELETE FROM product_images WHERE product_id = ?",
+              [id],
+              (deleteErr) => {
+                if (deleteErr) {
+                  console.error("Error deleting images:", deleteErr);
+                  return db.rollback(() => {
+                    res.status(500).json({ error: deleteErr.message });
+                  });
+                }
+                
+                db.commit((commitErr) => {
+                  if (commitErr) {
+                    console.error("Error committing transaction:", commitErr);
+                    return db.rollback(() => {
+                      res.status(500).json({ error: commitErr.message });
+                    });
+                  }
+                  res.json({
+                    message: "Product updated successfully",
+                  });
+                });
+              }
+            );
+          } else {
+            // Delete images not in keep list
+            db.query(
+              "SELECT image_url FROM product_images WHERE product_id = ?",
+              [id],
+              (selectErr, images) => {
+                if (selectErr) {
+                  console.error("Error fetching images:", selectErr);
+                  return db.rollback(() => {
+                    res.status(500).json({ error: selectErr.message });
+                  });
+                }
+
+                const imagesToDelete = images.filter(function(img) {
+                  return !existingImagesArray.includes(img.image_url);
+                });
+
+                if (imagesToDelete.length > 0) {
+                  const deleteValues = imagesToDelete.map(function(img) {
+                    return img.image_url;
+                  });
+                  
+                  const placeholders = deleteValues.map(function() {
+                    return '?';
+                  }).join(',');
+                  
+                  const deleteSql = `
+                    DELETE FROM product_images 
+                    WHERE product_id = ? AND image_url IN (${placeholders})
+                  `;
+                  
+                  db.query(
+                    deleteSql,
+                    [id].concat(deleteValues),
+                    (deleteErr) => {
+                      if (deleteErr) {
+                        console.error("Error deleting images:", deleteErr);
+                        return db.rollback(() => {
+                          res.status(500).json({ error: deleteErr.message });
+                        });
+                      }
+                      
+                      db.commit((commitErr) => {
+                        if (commitErr) {
+                          console.error("Error committing transaction:", commitErr);
+                          return db.rollback(() => {
+                            res.status(500).json({ error: commitErr.message });
+                          });
+                        }
+                        res.json({
+                          message: "Product updated successfully",
+                        });
+                      });
+                    }
+                  );
+                } else {
+                  db.commit((commitErr) => {
+                    if (commitErr) {
+                      console.error("Error committing transaction:", commitErr);
+                      return db.rollback(() => {
+                        res.status(500).json({ error: commitErr.message });
+                      });
+                    }
+                    res.json({
+                      message: "Product updated successfully",
+                    });
+                  });
+                }
+              }
+            );
+          }
+        }
+      }
+    );
+  });
 });
 
 // ====================================
