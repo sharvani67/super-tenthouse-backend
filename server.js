@@ -742,11 +742,13 @@ const cartRoutes = require("./routes/CartRoute");
 const userRoutes = require("./routes/userRoute");
 const packageRoutes = require('./routes/packages');
 
+
 // Additional routes
 const heroBannersRoutes = require("./routes/hero-banners");
 const testimonialsRoutes = require("./routes/testimonials");
 const whyChooseUsRoutes = require("./routes/whyChooseUs");
 const addonRoutes = require('./routes/addons');
+
 
 const cors = require("cors");
 const path = require("path");
@@ -1018,6 +1020,8 @@ app.use("/api/hero-banners", heroBannersRoutes);
 app.use("/api/testimonials", testimonialsRoutes);
 app.use("/api/why-choose-us", whyChooseUsRoutes);
 app.use("/api", cartRoutes);
+app.use('/api/packages', packageRoutes);
+app.use('/api/addons', addonRoutes);
 
 // ─── Route to check if an image exists ──────────────────────────────────────
 app.get("/api/check-image/:filename", (req, res) => {
