@@ -127,6 +127,7 @@
 
 // module.exports = router;
 
+
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
@@ -145,7 +146,8 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `category-${uniqueSuffix}${path.extname(file.originalname)}`);
+    const ext = path.extname(file.originalname);
+    cb(null, `category-${uniqueSuffix}${ext}`);
   }
 });
 
@@ -175,11 +177,16 @@ router.post("/", upload.single('image'), (req, res) => {
     const { category_name } = req.body;
     
     if (!category_name || category_name.trim() === '') {
+      // Clean up uploaded file if exists
+      if (req.file) {
+        fs.unlink(req.file.path, () => {});
+      }
       return res.status(400).json({ error: 'Category name is required' });
     }
 
     let imagePath = null;
     if (req.file) {
+      // Store path relative to uploads folder
       imagePath = `uploads/categories/${req.file.filename}`;
     }
 
@@ -266,41 +273,63 @@ router.get("/:id", (req, res) => {
 // ==============================
 router.put("/:id", upload.single('image'), (req, res) => {
   try {
-    const { category_name } = req.body;
+    const { category_name, image } = req.body;
     const categoryId = req.params.id;
 
     if (!category_name || category_name.trim() === '') {
+      if (req.file) {
+        fs.unlink(req.file.path, () => {});
+      }
       return res.status(400).json({ error: 'Category name is required' });
     }
 
-    // Get current image
+    // Get current category data
     const getCurrentSql = `SELECT image FROM product_categories WHERE id = ?`;
     
     db.query(getCurrentSql, [categoryId], (err, results) => {
       if (err) {
+        if (req.file) {
+          fs.unlink(req.file.path, () => {});
+        }
         console.error('Error fetching current category:', err);
         return res.status(500).json({ error: err.message });
       }
 
       if (results.length === 0) {
+        if (req.file) {
+          fs.unlink(req.file.path, () => {});
+        }
         return res.status(404).json({ error: "Category not found" });
       }
 
-      let imagePath = results[0]?.image;
+      let currentImage = results[0]?.image || null;
+      let newImagePath = currentImage;
 
-      // If new image uploaded
+      // Handle image update
       if (req.file) {
-        // Delete old image if exists
-        if (imagePath) {
-          const oldImagePath = path.join(__dirname, '..', imagePath);
+        // New image uploaded - delete old image if exists
+        if (currentImage) {
+          const oldImagePath = path.join(__dirname, '..', currentImage);
           if (fs.existsSync(oldImagePath)) {
             fs.unlink(oldImagePath, (unlinkErr) => {
               if (unlinkErr) console.error('Error deleting old image:', unlinkErr);
             });
           }
         }
-        imagePath = `uploads/categories/${req.file.filename}`;
+        newImagePath = `uploads/categories/${req.file.filename}`;
+      } else if (image === '') {
+        // Image removed explicitly
+        if (currentImage) {
+          const oldImagePath = path.join(__dirname, '..', currentImage);
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlink(oldImagePath, (unlinkErr) => {
+              if (unlinkErr) console.error('Error deleting old image:', unlinkErr);
+            });
+          }
+        }
+        newImagePath = null;
       }
+      // If image is undefined or has value, keep current image
 
       const updateSql = `
         UPDATE product_categories
@@ -308,7 +337,7 @@ router.put("/:id", upload.single('image'), (req, res) => {
         WHERE id = ?
       `;
 
-      db.query(updateSql, [category_name.trim(), imagePath, categoryId], (err) => {
+      db.query(updateSql, [category_name.trim(), newImagePath, categoryId], (err) => {
         if (err) {
           // If there's an error and new file was uploaded, delete it
           if (req.file) {
@@ -322,7 +351,7 @@ router.put("/:id", upload.single('image'), (req, res) => {
 
         res.json({
           message: "Category updated successfully",
-          image: imagePath
+          image: newImagePath
         });
       });
     });
