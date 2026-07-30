@@ -495,7 +495,6 @@ router.post("/cart", async (req, res) => {
     );
     
     if (tableCheck[0].count === 0) {
-      // Create the table if it doesn't exist
       await query(`
         CREATE TABLE IF NOT EXISTS cart_items (
           id INT AUTO_INCREMENT PRIMARY KEY,
@@ -514,7 +513,6 @@ router.post("/cart", async (req, res) => {
       console.log("📦 Created cart_items table");
     }
 
-    // Get product data - handle both 'id' and 'productId'
     const productId = String(product.id || product.productId || '');
     const productName = product.name || '';
     const productPrice = parseFloat(product.price) || 0;
@@ -547,7 +545,6 @@ router.post("/cart", async (req, res) => {
 
     let result;
     if (existingItem.length > 0) {
-      // Update existing item - add the new quantity to existing
       const newQuantity = existingItem[0].quantity + productQuantity;
       result = await query(
         `UPDATE cart_items 
@@ -568,7 +565,6 @@ router.post("/cart", async (req, res) => {
       );
       console.log("📦 Updated existing item, quantity now:", newQuantity);
     } else {
-      // Insert new item
       result = await query(
         `INSERT INTO cart_items 
         (customer_id, product_id, product_name, price, quantity, image, created_at, updated_at)
@@ -585,7 +581,6 @@ router.post("/cart", async (req, res) => {
       console.log("📦 Inserted new item with ID:", result.insertId);
     }
 
-    // Get the updated cart items
     const items = await query(
       `SELECT * FROM cart_items 
        WHERE customer_id = ? AND (saved_for_later IS NULL OR saved_for_later = 0)
@@ -618,7 +613,6 @@ router.get("/cart/:customerId", async (req, res) => {
 
     console.log("📦 Fetching cart for customer:", customerId);
 
-    // Check if table exists
     const tableCheck = await query(
       "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cart_items'"
     );
@@ -627,14 +621,6 @@ router.get("/cart/:customerId", async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    // Get ALL items for this customer to debug
-    const allItems = await query(
-      `SELECT * FROM cart_items WHERE customer_id = ?`,
-      [customerId]
-    );
-    console.log("📦 ALL items for customer:", JSON.stringify(allItems, null, 2));
-
-    // Get only active cart items
     const items = await query(
       `SELECT * FROM cart_items 
        WHERE customer_id = ? AND (saved_for_later IS NULL OR saved_for_later = 0)
@@ -643,7 +629,6 @@ router.get("/cart/:customerId", async (req, res) => {
     );
 
     console.log("📦 Active cart items found:", items.length);
-    console.log("📦 Active cart items:", JSON.stringify(items, null, 2));
 
     res.json({ success: true, data: items });
 
@@ -667,7 +652,6 @@ router.put("/cart", async (req, res) => {
       return res.status(400).json({ success: false, message: "Missing data" });
     }
 
-    // Handle composite ID if passed
     let actualProductId = productId;
     if (typeof productId === 'string' && productId.includes('_')) {
       actualProductId = productId.split('_')[0];
@@ -675,14 +659,12 @@ router.put("/cart", async (req, res) => {
 
     console.log("📦 Looking for productId:", actualProductId);
 
-    // Try to find the item
     let existingItem = await query(
       `SELECT * FROM cart_items 
        WHERE customer_id = ? AND product_id = ? AND (saved_for_later IS NULL OR saved_for_later = 0)`,
       [customerId, actualProductId]
     );
 
-    // If not found, try other matching methods
     if (existingItem.length === 0) {
       const stringMatch = await query(
         `SELECT * FROM cart_items 
@@ -712,7 +694,6 @@ router.put("/cart", async (req, res) => {
 
     const dbProductId = existingItem[0].product_id;
 
-    // Update or delete
     if (quantity <= 0) {
       await query(
         `DELETE FROM cart_items 
@@ -730,7 +711,6 @@ router.put("/cart", async (req, res) => {
       console.log("📦 Item updated to quantity:", quantity);
     }
 
-    // Get updated cart
     const items = await query(
       `SELECT * FROM cart_items 
        WHERE customer_id = ? AND (saved_for_later IS NULL OR saved_for_later = 0)
@@ -753,28 +733,95 @@ router.put("/cart", async (req, res) => {
   }
 });
 
-// ✅ REMOVE SINGLE ITEM
+// ✅ REMOVE SINGLE ITEM - FIXED WITH BETTER HANDLING
+// routes/CartRoute.js - Verify the DELETE endpoint
+
+// ✅ REMOVE SINGLE ITEM - FIXED WITH BETTER DEBUGGING
+// routes/CartRoute.js - Updated DELETE endpoint with more logging
+
+// ✅ REMOVE SINGLE ITEM - WITH EXTRA DEBUGGING
 router.delete("/cart/item", async (req, res) => {
   try {
+    console.log("📦 ========== DELETE REQUEST RECEIVED ==========");
+    console.log("📦 Request body:", req.body);
+    console.log("📦 Request headers:", req.headers);
+    
     const { customerId, productId } = req.body;
 
-    console.log("📦 Removing item:", { customerId, productId });
+    console.log("📦 DELETE Request:", { customerId, productId });
 
     if (!customerId || !productId) {
-      return res.status(400).json({ success: false, message: "Missing data" });
+      console.log("❌ Missing customerId or productId");
+      return res.status(400).json({ 
+        success: false, 
+        message: "Missing customerId or productId" 
+      });
     }
 
+    // Handle composite ID if passed
     let actualProductId = productId;
     if (typeof productId === 'string' && productId.includes('_')) {
       actualProductId = productId.split('_')[0];
     }
 
-    await query(
-      `DELETE FROM cart_items 
-       WHERE customer_id = ? AND product_id = ?`,
+    console.log("📦 Actual productId to delete:", actualProductId);
+
+    // First check if the item exists
+    const existingItem = await query(
+      `SELECT * FROM cart_items 
+       WHERE customer_id = ? AND product_id = ? AND (saved_for_later IS NULL OR saved_for_later = 0)`,
       [customerId, actualProductId]
     );
 
+    console.log("📦 Existing item found:", existingItem);
+
+    if (existingItem.length === 0) {
+      console.log("❌ Item not found in cart with exact match, trying string comparison...");
+      // Try with string comparison
+      const stringMatch = await query(
+        `SELECT * FROM cart_items 
+         WHERE customer_id = ? AND CAST(product_id AS CHAR) = ? AND (saved_for_later IS NULL OR saved_for_later = 0)`,
+        [customerId, String(actualProductId)]
+      );
+      
+      console.log("📦 String match result:", stringMatch);
+      
+      if (stringMatch.length > 0) {
+        console.log("✅ Found via string comparison, deleting...");
+        await query(
+          `DELETE FROM cart_items 
+           WHERE customer_id = ? AND product_id = ?`,
+          [customerId, stringMatch[0].product_id]
+        );
+        console.log("📦 Item deleted via string match");
+      } else {
+        console.log("❌ Item not found in cart, returning current cart");
+        const items = await query(
+          `SELECT * FROM cart_items 
+           WHERE customer_id = ? AND (saved_for_later IS NULL OR saved_for_later = 0)
+           ORDER BY updated_at DESC`,
+          [customerId]
+        );
+        
+        return res.json({ 
+          success: true, 
+          message: "Item not found in cart",
+          data: items 
+        });
+      }
+    } else {
+      // Delete the item
+      console.log("✅ Found item, deleting...");
+      const deleteResult = await query(
+        `DELETE FROM cart_items 
+         WHERE customer_id = ? AND product_id = ?`,
+        [customerId, actualProductId]
+      );
+      console.log("📦 Delete result:", deleteResult);
+      console.log("📦 Item deleted successfully");
+    }
+
+    // Get updated cart
     const items = await query(
       `SELECT * FROM cart_items 
        WHERE customer_id = ? AND (saved_for_later IS NULL OR saved_for_later = 0)
@@ -782,40 +829,59 @@ router.delete("/cart/item", async (req, res) => {
       [customerId]
     );
 
+    console.log("📦 Cart items after deletion:", items.length);
+    console.log("📦 ========== DELETE COMPLETED ==========");
+
     res.json({ 
       success: true, 
-      message: "Item removed",
+      message: "Item removed successfully",
       data: items 
     });
 
   } catch (err) {
-    console.error("Error removing item:", err);
+    console.error("❌ Error removing item:", err);
     res.status(500).json({ 
       success: false, 
-      message: "Error removing item" 
+      message: "Error removing item",
+      error: err.message 
     });
   }
 });
 
-// ✅ CLEAR CART
+// ✅ CLEAR CART - FIXED
 router.delete("/cart/:customerId", async (req, res) => {
   try {
     const { customerId } = req.params;
 
     console.log("📦 Clearing cart for customer:", customerId);
 
-    await query(
+    if (!customerId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Customer ID is required" 
+      });
+    }
+
+    // Delete all items for this customer
+    const result = await query(
       `DELETE FROM cart_items WHERE customer_id = ?`,
       [customerId]
     );
 
-    res.json({ success: true, message: "Cart cleared" });
+    console.log("📦 Deleted", result.affectedRows, "items from cart");
+
+    res.json({ 
+      success: true, 
+      message: "Cart cleared successfully",
+      deletedCount: result.affectedRows 
+    });
 
   } catch (err) {
     console.error("Error clearing cart:", err);
     res.status(500).json({ 
       success: false, 
-      message: "Error clearing cart" 
+      message: "Error clearing cart",
+      error: err.message 
     });
   }
 });
