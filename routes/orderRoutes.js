@@ -445,4 +445,53 @@ router.get("/stats/summary", async (req, res) => {
   }
 });
 
+
+// ==============================
+// UPDATE ADMIN ORDER STATUS AND PAYMENT STATUS
+// ==============================
+router.put("/:id/status-payment", async (req, res) => {
+  const { status, payment_status } = req.body;
+
+  const validStatuses = ['pending', 'approved', 'processing', 'completed', 'cancelled'];
+  const validPaymentStatuses = ['pending', 'paid', 'failed', 'completed']; // lowercase, matches frontend
+
+  let updates = [];
+  let params = [];
+
+  if (status && validStatuses.includes(status)) {
+    updates.push("status = ?");
+    params.push(status);
+  }
+
+  if (payment_status && validPaymentStatuses.includes(payment_status.toLowerCase())) {
+    updates.push("payment_status = ?");
+    params.push(payment_status.toLowerCase());
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: "At least one field (status or payment_status) is required" });
+  }
+
+  try {
+    const [result] = await db.promise().query(
+      `UPDATE admin_orders SET ${updates.join(", ")} WHERE id = ?`,
+      [...params, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const [updatedOrder] = await db.promise().query(
+      "SELECT * FROM admin_orders WHERE id = ?",
+      [req.params.id]
+    );
+
+    res.json({ message: "Order updated successfully", data: updatedOrder[0] });
+  } catch (err) {
+    console.error("Error updating order:", err);
+    res.status(500).json({ error: "Failed to update order", message: err.message });
+  }
+});
+
 module.exports = router;

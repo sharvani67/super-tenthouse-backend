@@ -99,4 +99,53 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+
+// ==============================
+// UPDATE CUSTOMER ORDER STATUS AND PAYMENT STATUS
+// ==============================
+router.put("/:id/status-payment", async (req, res) => {
+  const { order_status, payment_status } = req.body;
+
+  const validStatuses = ['pending', 'approved', 'processing', 'completed', 'cancelled'];
+  const validPaymentStatuses = ['pending', 'paid', 'failed', 'completed'];
+
+  let updates = [];
+  let params = [];
+
+  if (order_status && validStatuses.includes(order_status)) {
+    updates.push("order_status = ?");
+    params.push(order_status);
+  }
+
+  if (payment_status && validPaymentStatuses.includes(payment_status.toLowerCase())) {
+    updates.push("payment_status = ?");
+    params.push(payment_status.toLowerCase());
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: "At least one field (order_status or payment_status) is required" });
+  }
+
+  try {
+    const [result] = await db.promise().query(
+      `UPDATE orders SET ${updates.join(", ")} WHERE id = ?`,
+      [...params, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    const [updatedOrder] = await db.promise().query(
+      "SELECT * FROM orders WHERE id = ?",
+      [req.params.id]
+    );
+
+    res.json({ success: true, message: "Order updated successfully", data: updatedOrder[0] });
+  } catch (err) {
+    console.error("Error updating customer order:", err);
+    res.status(500).json({ success: false, error: "Failed to update order", message: err.message });
+  }
+});
+
 module.exports = router;
