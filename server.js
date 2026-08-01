@@ -4,11 +4,13 @@ const express = require("express");
 // Import all route files
 const loginRoutes = require("./routes/loginRoutes");
 const productRoutes = require("./routes/productRoute");
+const orderRoutes = require("./routes/orderRoutes");
 const categoryRoutes = require("./routes/categoryRoute");
 const customerRoutes = require("./routes/Customerlogin");
 const cartRoutes = require("./routes/CartRoute");
 const userRoutes = require("./routes/userRoute");
 const packageRoutes = require('./routes/packages');
+
 
 // Additional routes
 const heroBannersRoutes = require("./routes/hero-banners");
@@ -87,6 +89,8 @@ app.use("/api/hero-banners", heroBannersRoutes);
 app.use("/api/testimonials", testimonialsRoutes);
 app.use("/api/why-choose-us", whyChooseUsRoutes);
 app.use("/api", cartRoutes);
+app.use("/api/orders", orderRoutes);
+
 
 // ✅ Error handling middleware
 app.use((err, req, res, next) => {
