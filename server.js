@@ -1146,6 +1146,7 @@ const testimonialsRoutes = require("./routes/testimonials");
 const whyChooseUsRoutes = require("./routes/whyChooseUs");
 const addonRoutes = require('./routes/addons');
 const checkoutRoutes = require("./routes/checkout");
+const customerOrderRoutes = require("./routes/customerOrderRoutes");
 
 const app = express();
 
@@ -1435,6 +1436,9 @@ app.use("/api/testimonials", testimonialsRoutes);
 app.use("/api/why-choose-us", whyChooseUsRoutes);
 app.use("/api", cartRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/customer-orders", customerOrderRoutes);
+
+
 
 app.use("/api/checkout", checkoutRoutes);
 // ─── Wishlist Routes ──────────────────────────────────────────────────────────
