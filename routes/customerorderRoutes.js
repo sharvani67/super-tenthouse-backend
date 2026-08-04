@@ -1,16 +1,23 @@
+// backend/routes/customerOrderRoutes.js
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
 
 // ==============================
-// GET ALL CUSTOMER ORDERS
+// GET ALL ORDERS
 // ==============================
 router.get("/", async (req, res) => {
   try {
+    console.log('📦 Fetching all orders');
+    
     const sql = `
       SELECT 
-        o.*
+        o.*,
+        c.name as customer_name,
+        c.email as customer_email,
+        c.phone as customer_phone
       FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
       ORDER BY o.id DESC
     `;
 
@@ -18,7 +25,6 @@ router.get("/", async (req, res) => {
 
     // Parse items JSON for each order
     for (let order of orders) {
-      // Parse items if it's a string
       if (order.items && typeof order.items === 'string') {
         try {
           order.items = JSON.parse(order.items);
@@ -26,8 +32,60 @@ router.get("/", async (req, res) => {
           order.items = [];
         }
       }
-      
-      // If items is already an object/array, keep it as is
+      if (!order.items) {
+        order.items = [];
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Orders fetched successfully",
+      count: orders.length,
+      data: orders
+    });
+
+  } catch (err) {
+    console.error("Error fetching orders:", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch orders",
+      message: err.message
+    });
+  }
+});
+
+// ==============================
+// GET ORDERS BY CUSTOMER ID
+// ==============================
+router.get("/customer/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    
+    console.log('📦 Fetching orders for customer:', customerId);
+    
+    const sql = `
+      SELECT 
+        o.*,
+        c.name as customer_name,
+        c.email as customer_email,
+        c.phone as customer_phone
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      WHERE o.customer_id = ?
+      ORDER BY o.id DESC
+    `;
+
+    const [orders] = await db.promise().query(sql, [customerId]);
+
+    // Parse items JSON for each order
+    for (let order of orders) {
+      if (order.items && typeof order.items === 'string') {
+        try {
+          order.items = JSON.parse(order.items);
+        } catch (e) {
+          order.items = [];
+        }
+      }
       if (!order.items) {
         order.items = [];
       }
@@ -51,42 +109,50 @@ router.get("/", async (req, res) => {
 });
 
 // ==============================
-// GET CUSTOMER ORDER BY ID
+// GET SINGLE ORDER BY ID
 // ==============================
 router.get("/:id", async (req, res) => {
   try {
-    const [order] = await db.promise().query(
-      `
-      SELECT * FROM orders
-      WHERE id = ?
-      `,
-      [req.params.id]
-    );
+    const orderId = req.params.id;
+    console.log('📦 Fetching order details for ID:', orderId);
+    
+    const sql = `
+      SELECT 
+        o.*,
+        c.name as customer_name,
+        c.email as customer_email,
+        c.phone as customer_phone
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      WHERE o.id = ?
+    `;
 
-    if (order.length === 0) {
+    const [orders] = await db.promise().query(sql, [orderId]);
+
+    if (orders.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Order not found"
       });
     }
 
-    // Parse items JSON
-    if (order[0].items && typeof order[0].items === 'string') {
+    const order = orders[0];
+    
+    if (order.items && typeof order.items === 'string') {
       try {
-        order[0].items = JSON.parse(order[0].items);
+        order.items = JSON.parse(order.items);
       } catch (e) {
-        order[0].items = [];
+        order.items = [];
       }
     }
-    
-    if (!order[0].items) {
-      order[0].items = [];
+    if (!order.items) {
+      order.items = [];
     }
 
     res.json({
       success: true,
       message: "Order details fetched successfully",
-      data: order[0]
+      data: order
     });
 
   } catch (err) {
@@ -100,25 +166,89 @@ router.get("/:id", async (req, res) => {
 });
 
 // ==============================
-// UPDATE CUSTOMER ORDER STATUS AND PAYMENT STATUS
+// UPDATE ORDER STATUS (APPROVE/REJECT)
+// ==============================
+router.put("/:id/status", async (req, res) => {
+  const { status } = req.body;
+  const orderId = req.params.id;
+
+  console.log('📦 Updating order status:', { orderId, status });
+
+  const validStatuses = ['pending', 'approved', 'rejected', 'processing', 'completed', 'cancelled'];
+  
+  if (!validStatuses.includes(status.toLowerCase())) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid status. Valid values: ${validStatuses.join(', ')}`
+    });
+  }
+
+  try {
+    const query = `UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?`;
+    const [result] = await db.promise().query(query, [status.toLowerCase(), orderId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    // Fetch the updated order
+    const [updatedOrder] = await db.promise().query(
+      `SELECT 
+        o.*,
+        c.name as customer_name,
+        c.email as customer_email,
+        c.phone as customer_phone
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      WHERE o.id = ?`,
+      [orderId]
+    );
+
+    if (updatedOrder[0].items && typeof updatedOrder[0].items === 'string') {
+      try {
+        updatedOrder[0].items = JSON.parse(updatedOrder[0].items);
+      } catch (e) {
+        updatedOrder[0].items = [];
+      }
+    }
+
+    const statusMessage = status.toLowerCase() === 'approved' ? 'approved' : 
+                         status.toLowerCase() === 'rejected' ? 'rejected' : 'updated';
+
+    res.json({
+      success: true,
+      message: `Order ${statusMessage} successfully`,
+      data: updatedOrder[0]
+    });
+
+  } catch (err) {
+    console.error("Error updating order status:", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to update order status",
+      message: err.message
+    });
+  }
+});
+
+// ==============================
+// UPDATE ORDER STATUS AND PAYMENT
 // ==============================
 router.put("/:id/status-payment", async (req, res) => {
   const { status, payment_status } = req.body;
+  const orderId = req.params.id;
 
-  console.log('Received update request for customer order:', { 
-    id: req.params.id, 
-    status, 
-    payment_status 
-  });
+  console.log('📦 Updating order status and payment:', { orderId, status, payment_status });
 
-  // Valid statuses - including 'approved' and 'rejected'
   const validStatuses = ['pending', 'approved', 'rejected', 'processing', 'completed', 'cancelled'];
-  const validPaymentStatuses = ['pending', 'completed', 'failed', 'blocked', 'paid'];
+  const validPaymentStatuses = ['pending', 'paid', 'failed', 'blocked'];
 
   let updates = [];
   let params = [];
 
-  // Update the 'status' field (not 'order_status')
   if (status && validStatuses.includes(status.toLowerCase())) {
     updates.push("status = ?");
     params.push(status.toLowerCase());
@@ -146,19 +276,13 @@ router.put("/:id/status-payment", async (req, res) => {
     });
   }
 
-  // Add updated_at timestamp
   updates.push("updated_at = NOW()");
 
   try {
     const query = `UPDATE orders SET ${updates.join(", ")} WHERE id = ?`;
-    const values = [...params, req.params.id];
+    const values = [...params, orderId];
     
-    console.log('Executing query:', query);
-    console.log('With values:', values);
-
     const [result] = await db.promise().query(query, values);
-
-    console.log('Update result:', result);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
@@ -167,20 +291,18 @@ router.put("/:id/status-payment", async (req, res) => {
       });
     }
 
-    // Fetch the updated order
     const [updatedOrder] = await db.promise().query(
-      "SELECT * FROM orders WHERE id = ?",
-      [req.params.id]
+      `SELECT 
+        o.*,
+        c.name as customer_name,
+        c.email as customer_email,
+        c.phone as customer_phone
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      WHERE o.id = ?`,
+      [orderId]
     );
 
-    if (!updatedOrder || updatedOrder.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found after update"
-      });
-    }
-
-    // Parse items JSON if needed
     if (updatedOrder[0].items && typeof updatedOrder[0].items === 'string') {
       try {
         updatedOrder[0].items = JSON.parse(updatedOrder[0].items);
@@ -189,20 +311,18 @@ router.put("/:id/status-payment", async (req, res) => {
       }
     }
 
-    console.log('Updated order:', updatedOrder[0]);
-
     res.json({
       success: true,
       message: "Order updated successfully",
       data: updatedOrder[0]
     });
+
   } catch (err) {
-    console.error("Error updating customer order:", err);
+    console.error("Error updating order:", err);
     res.status(500).json({
       success: false,
       error: "Failed to update order",
-      message: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      message: err.message
     });
   }
 });
