@@ -1572,6 +1572,7 @@ const packageRoutes = require('./routes/packages');
 const wishlistRoutes = require("./routes/WishlistRoute");
 const couponRoutes = require("./routes/couponRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
+const salesmanRoutes = require("./routes/salesmanRoutes");
 
 // Additional routes
 const heroBannersRoutes = require("./routes/hero-banners");
@@ -1870,6 +1871,7 @@ app.use("/api/why-choose-us", whyChooseUsRoutes);
 app.use("/api", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/invoice", invoiceRoutes);
+app.use("/api/salesman", salesmanRoutes);
 
 // ─── CUSTOMER ORDER ROUTES ─────────────────────────────────────────────────────
 // GET /api/customer-orders - Get all customer orders
