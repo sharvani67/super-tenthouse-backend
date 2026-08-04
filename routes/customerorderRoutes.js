@@ -168,12 +168,16 @@ router.get("/:id", async (req, res) => {
 // ==============================
 // UPDATE ORDER STATUS (APPROVE/REJECT)
 // ==============================
+// backend/routes/customerOrderRoutes.js - Update the status update route
+
+// ─── UPDATE ORDER STATUS ─────────────────────────────────────────────────────
 router.put("/:id/status", async (req, res) => {
   const { status } = req.body;
   const orderId = req.params.id;
 
   console.log('📦 Updating order status:', { orderId, status });
 
+  // Valid statuses: pending, approved, rejected, processing, completed, cancelled
   const validStatuses = ['pending', 'approved', 'rejected', 'processing', 'completed', 'cancelled'];
   
   if (!validStatuses.includes(status.toLowerCase())) {
@@ -196,14 +200,7 @@ router.put("/:id/status", async (req, res) => {
 
     // Fetch the updated order
     const [updatedOrder] = await db.promise().query(
-      `SELECT 
-        o.*,
-        c.name as customer_name,
-        c.email as customer_email,
-        c.phone as customer_phone
-      FROM orders o
-      LEFT JOIN customers c ON o.customer_id = c.id
-      WHERE o.id = ?`,
+      `SELECT * FROM orders WHERE id = ?`,
       [orderId]
     );
 
@@ -215,12 +212,9 @@ router.put("/:id/status", async (req, res) => {
       }
     }
 
-    const statusMessage = status.toLowerCase() === 'approved' ? 'approved' : 
-                         status.toLowerCase() === 'rejected' ? 'rejected' : 'updated';
-
     res.json({
       success: true,
-      message: `Order ${statusMessage} successfully`,
+      message: `Order ${status.toLowerCase()} successfully`,
       data: updatedOrder[0]
     });
 

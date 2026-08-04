@@ -77,19 +77,26 @@ function generateInvoiceHTML(order) {
 
   const items = Array.isArray(order.items) ? order.items : [];
   
-  // Format event date if exists
+  // ─── FIX: Properly format the event date ──────────────────────────────────
   let eventDateFormatted = 'N/A';
-  if (order.event_date) {
+  if (order.eventDate) {
     try {
-      eventDateFormatted = new Date(order.event_date).toLocaleDateString('en-IN', { 
-        day: 'numeric', 
-        month: 'long', 
-        year: 'numeric' 
-      });
+      const eventDate = new Date(order.eventDate);
+      if (!isNaN(eventDate.getTime())) {
+        eventDateFormatted = eventDate.toLocaleDateString('en-IN', { 
+          day: 'numeric', 
+          month: 'long', 
+          year: 'numeric' 
+        });
+      } else {
+        eventDateFormatted = order.eventDate;
+      }
     } catch (e) {
-      eventDateFormatted = order.event_date;
+      eventDateFormatted = order.eventDate;
     }
   }
+  
+  console.log('📄 Event Date formatted:', eventDateFormatted);
   
   return `
     <!DOCTYPE html>
@@ -287,24 +294,24 @@ function generateInvoiceHTML(order) {
           <div class="customer-info">
             <div>
               <div class="label">Customer</div>
-              <div class="value">${order.customer_name || order.customerName || 'N/A'}</div>
-              <div style="font-size: 13px; color: #666; margin-top: 2px;">${order.customer_email || order.customerEmail || 'N/A'}</div>
-              <div style="font-size: 13px; color: #666;">${order.customer_phone || order.customerPhone || 'N/A'}</div>
+              <div class="value">${order.customerName || 'N/A'}</div>
+              <div style="font-size: 13px; color: #666; margin-top: 2px;">${order.customerEmail || 'N/A'}</div>
+              <div style="font-size: 13px; color: #666;">${order.customerPhone || 'N/A'}</div>
             </div>
             <div>
               <div class="label">Delivery Address</div>
-              <div class="value">${order.address_full_name || order.address?.fullName || 'N/A'}</div>
-              <div style="font-size: 13px; color: #666; margin-top: 2px;">${order.address_line1 || order.address?.line1 || ''}</div>
-              ${(order.address_line2 || order.address?.line2) ? `<div style="font-size: 13px; color: #666;">${order.address_line2 || order.address?.line2}</div>` : ''}
-              <div style="font-size: 13px; color: #666;">${order.address_city || order.address?.city || ''}, ${order.address_state || order.address?.state || ''} - ${order.address_pincode || order.address?.pincode || ''}</div>
-              <div style="font-size: 13px; color: #666;">${order.address_country || order.address?.country || 'India'}</div>
+              <div class="value">${order.address?.fullName || 'N/A'}</div>
+              <div style="font-size: 13px; color: #666; margin-top: 2px;">${order.address?.line1 || ''}</div>
+              ${order.address?.line2 ? `<div style="font-size: 13px; color: #666;">${order.address.line2}</div>` : ''}
+              <div style="font-size: 13px; color: #666;">${order.address?.city || ''}, ${order.address?.state || ''} - ${order.address?.pincode || ''}</div>
+              <div style="font-size: 13px; color: #666;">${order.address?.country || 'India'}</div>
             </div>
           </div>
 
           <div class="event-details">
             <div class="item">
               <div class="label">Event Type</div>
-              <div class="value">${order.event_type || order.eventType || 'N/A'}</div>
+              <div class="value">${order.eventType || 'N/A'}</div>
             </div>
             <div class="item">
               <div class="label">Event Date</div>
@@ -312,22 +319,22 @@ function generateInvoiceHTML(order) {
             </div>
             <div class="item">
               <div class="label">Guest Count</div>
-              <div class="value">${order.guest_count || order.guestCount || 0}</div>
+              <div class="value">${order.guestCount || 0}</div>
             </div>
             <div class="item span-full">
               <div class="label">Venue</div>
               <div class="value">${order.venue || 'N/A'}</div>
             </div>
-            ${order.event_time || order.eventTime ? `
+            ${order.eventTime ? `
             <div class="item span-full">
               <div class="label">Event Time</div>
-              <div class="value">${order.event_time || order.eventTime || 'N/A'}</div>
+              <div class="value">${order.eventTime}</div>
             </div>
             ` : ''}
-            ${order.special_instructions || order.specialInstructions ? `
+            ${order.specialInstructions ? `
             <div class="item span-full">
               <div class="label">Special Instructions</div>
-              <div class="value">${order.special_instructions || order.specialInstructions || 'N/A'}</div>
+              <div class="value">${order.specialInstructions}</div>
             </div>
             ` : ''}
           </div>
@@ -347,7 +354,7 @@ function generateInvoiceHTML(order) {
                   <td class="item-name">${item.name || 'Item'}</td>
                   <td style="text-align: center;">${item.quantity || 0}</td>
                   <td style="text-align: right;">₹${(item.price || 0).toLocaleString('en-IN')}</td>
-                  <td style="text-align: right; font-weight: 600;">₹${((item.price || 0) * (item.quantity || 0)).toLocaleString('en-IN')}</td>
+                  <td style="text-align: right; font-weight: 600;">₹${(item.total || (item.price || 0) * (item.quantity || 0)).toLocaleString('en-IN')}</td>
                 </tr>
               `).join('') : `
                 <tr>
@@ -362,15 +369,15 @@ function generateInvoiceHTML(order) {
               <span class="label">Subtotal</span>
               <span class="value">₹${(order.subtotal || 0).toLocaleString('en-IN')}</span>
             </div>
-            ${(order.coupon_discount || order.couponDiscount) > 0 ? `
+            ${(order.couponDiscount || 0) > 0 ? `
               <div class="summary-row">
-                <span class="label">Discount (${order.coupon_code || order.couponCode || 'Coupon'})</span>
-                <span class="value" style="color: #2e7d32;">-₹${(order.coupon_discount || order.couponDiscount || 0).toLocaleString('en-IN')}</span>
+                <span class="label">Discount (${order.couponCode || 'Coupon'})</span>
+                <span class="value" style="color: #2e7d32;">-₹${(order.couponDiscount || 0).toLocaleString('en-IN')}</span>
               </div>
             ` : ''}
             <div class="summary-row">
               <span class="label">Delivery Charge</span>
-              <span class="value">${(order.delivery_charge || order.deliveryCharge) === 0 ? 'FREE' : `₹${(order.delivery_charge || order.deliveryCharge || 0).toLocaleString('en-IN')}`}</span>
+              <span class="value">${(order.deliveryCharge || 0) === 0 ? 'FREE' : `₹${(order.deliveryCharge || 0).toLocaleString('en-IN')}`}</span>
             </div>
             <div class="summary-row">
               <span class="label">GST (18%)</span>
@@ -378,18 +385,18 @@ function generateInvoiceHTML(order) {
             </div>
             <div class="summary-row total">
               <span class="label">Grand Total</span>
-              <span class="value">₹${(order.grand_total || order.grandTotal || 0).toLocaleString('en-IN')}</span>
+              <span class="value">₹${(order.grandTotal || 0).toLocaleString('en-IN')}</span>
             </div>
           </div>
 
           <div class="payment-info">
             <div>
               <span class="label">Payment Method: </span>
-              <span class="value">${(order.payment_method || order.paymentMethod || 'N/A').toUpperCase()}</span>
+              <span class="value">${(order.paymentMethod || 'N/A').toUpperCase()}</span>
             </div>
             <div>
               <span class="label">Payment Status: </span>
-              <span class="value">${(order.payment_status || order.paymentStatus || 'PENDING').toUpperCase()}</span>
+              <span class="value ${(order.paymentStatus || 'PENDING').toLowerCase()}">${(order.paymentStatus || 'PENDING').toUpperCase()}</span>
             </div>
           </div>
 
