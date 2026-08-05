@@ -2020,6 +2020,7 @@
 
 
 // server.js
+// server.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -2031,7 +2032,7 @@ const loginRoutes = require("./routes/loginRoutes");
 const productRoutes = require("./routes/productRoute");
 const orderRoutes = require("./routes/orderRoutes");
 const categoryRoutes = require("./routes/categoryRoute");
-const customerRoutes = require("./routes/Customerlogin");
+const customerRoutes = require("./routes/Customerlogin"); // This has register/login
 const cartRoutes = require("./routes/CartRoute");
 const userRoutes = require("./routes/userRoute");
 const packageRoutes = require('./routes/packages');
@@ -2048,11 +2049,7 @@ const whyChooseUsRoutes = require("./routes/whyChooseUs");
 const addonRoutes = require('./routes/addons');
 const checkoutRoutes = require("./routes/checkout");
 const customerOrderRoutes = require("./routes/customerOrderRoutes");
-
-
-// ─── NEW: Customer Profile Routes ──────────────────────────────────────────────
 const customerProfileRoutes = require("./routes/customerProfileRoutes");
-
 const salesmanOrderRoutes = require("./routes/salesmanOrderRoutes");
 
 const app = express();
@@ -2078,12 +2075,10 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Max-Age', '86400');
   
-  // Handle preflight requests immediately
   if (req.method === 'OPTIONS') {
     console.log('📡 Preflight request for:', req.url);
     return res.status(200).end();
   }
-  
   next();
 });
 
@@ -2097,7 +2092,7 @@ const uploadPath = path.join(__dirname, "uploads");
 const imagePath = path.join(uploadPath, "products");
 const pdfPath = path.join(uploadPath, "pdfs");
 const categoriesPath = path.join(uploadPath, "categories");
-const profilesPath = path.join(uploadPath, "profiles"); // ─── NEW: Profiles folder
+const profilesPath = path.join(uploadPath, "profiles");
 
 [uploadPath, imagePath, pdfPath, categoriesPath, profilesPath].forEach(dir => {
   if (!fs.existsSync(dir)) {
@@ -2111,7 +2106,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/uploads/products", express.static(path.join(__dirname, "uploads/products")));
 app.use("/uploads/categories", express.static(path.join(__dirname, "uploads/categories")));
 app.use("/uploads/pdfs", express.static(path.join(__dirname, "uploads/pdfs")));
-app.use("/uploads/profiles", express.static(path.join(__dirname, "uploads/profiles"))); // ─── NEW: Profiles static
+app.use("/uploads/profiles", express.static(path.join(__dirname, "uploads/profiles")));
 
 // ─── Add logging middleware to see incoming requests ─────────────────────────
 app.use((req, res, next) => {
@@ -2125,54 +2120,74 @@ app.get("/api/test", (req, res) => {
     message: "API is working!", 
     timestamp: new Date().toISOString(),
     uploadsPath: "/uploads",
-    endpoints: [
-      "/api/products",
-      "/api/products/category/:categoryId",
-      "/api/products/trending",
-      "/api/products/best-sellers",
-      "/api/products/new-arrivals",
-      "/api/products/search",
-      "/api/products/:id",
-      "/api/categories",
-      "/api/categories/:id",
-      "/api/customers/profile/:id",
-      "/api/customers/:id/profile-image",
-      "/api/customers/:id",
-      "/api/customers/me"
+    authEndpoints: [
+      "POST /api/auth/register",
+      "POST /api/auth/login", 
+      "POST /api/auth/verify-otp",
+      "POST /api/auth/resend-otp",
+      "POST /api/customers/register",
+      "POST /api/customers/login"
     ]
   });
 });
 
-// ─── Debug route to check product description ──────────────────────────────
-app.get("/api/debug/description/:id", (req, res) => {
-  const productId = req.params.id;
-  const db = require("./db");
+// ═══════════════════════════════════════════════════════════════════
+// 🔐 FIX: Mount auth routes on /api/auth
+// ═══════════════════════════════════════════════════════════════════
+app.use("/api/auth", customerRoutes);
+
+// ─── API Routes - Register AFTER middleware ──────────────────────────────────
+app.use("/api/admin", loginRoutes);
+app.use('/api/packages', packageRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/customers", userRoutes);
+app.use('/api/addons', addonRoutes);
+app.use("/api/customers", customerRoutes); // Also keep this for backward compatibility
+app.use("/api/hero-banners", heroBannersRoutes);
+app.use("/api/testimonials", testimonialsRoutes);
+app.use("/api/why-choose-us", whyChooseUsRoutes);
+app.use("/api", cartRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/invoice", invoiceRoutes);
+app.use("/api/salesman", salesmanRoutes);
+app.use("/api", notificationRoutes);
+app.use("/api/salesman-orders", salesmanOrderRoutes);
+app.use("/api/customers", customerProfileRoutes);
+app.use("/api/customer-orders", customerOrderRoutes);
+app.use("/api", couponRoutes);
+app.use("/api/checkout", checkoutRoutes);
+app.use("/api/wishlist", wishlistRoutes);
+
+// ─── Route to check if an image exists ──────────────────────────────────────
+app.get("/api/check-image/:filename", (req, res) => {
+  const filename = req.params.filename;
+  const imagePath = path.join(__dirname, "uploads/products", filename);
   
-  db.query(
-    "SELECT id, product_name, product_description, description FROM products WHERE id = ?",
-    [productId],
-    (err, results) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      if (results.length === 0) {
-        return res.status(404).json({ message: "Product not found" });
-      }
-      
-      res.json({
-        productId: results[0].id,
-        productName: results[0].product_name,
-        product_description: results[0].product_description,
-        description: results[0].description,
-        hasProductDescription: !!results[0].product_description,
-        hasDescription: !!results[0].description,
-        length: results[0].product_description?.length || 0
-      });
-    }
-  );
+  if (fs.existsSync(imagePath)) {
+    res.json({ exists: true, path: `/uploads/products/${filename}` });
+  } else {
+    res.json({ exists: false, message: "Image not found" });
+  }
 });
 
-// ─── Debug route to check product color images ──────────────────────────────
+// ─── Route to list all images in products folder ────────────────────────────
+app.get("/api/list-images", (req, res) => {
+  const productsPath = path.join(__dirname, "uploads/products");
+  
+  if (fs.existsSync(productsPath)) {
+    const files = fs.readdirSync(productsPath);
+    res.json({ 
+      count: files.length, 
+      files: files,
+      path: "/uploads/products/"
+    });
+  } else {
+    res.json({ count: 0, files: [], message: "Products folder not found" });
+  }
+});
+
+// ─── Debug routes ──────────────────────────────────────────────────────────────
 app.get("/api/debug/product/:id", (req, res) => {
   const productId = req.params.id;
   const db = require("./db");
@@ -2238,7 +2253,34 @@ app.get("/api/debug/product/:id", (req, res) => {
   );
 });
 
-// ─── FIX: Direct update route for color images ──────────────────────────────
+app.get("/api/debug/description/:id", (req, res) => {
+  const productId = req.params.id;
+  const db = require("./db");
+  
+  db.query(
+    "SELECT id, product_name, product_description, description FROM products WHERE id = ?",
+    [productId],
+    (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (results.length === 0) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      
+      res.json({
+        productId: results[0].id,
+        productName: results[0].product_name,
+        product_description: results[0].product_description,
+        description: results[0].description,
+        hasProductDescription: !!results[0].product_description,
+        hasDescription: !!results[0].description,
+        length: results[0].product_description?.length || 0
+      });
+    }
+  );
+});
+
 app.post("/api/fix-color-images/:id", (req, res) => {
   const productId = req.params.id;
   const db = require("./db");
@@ -2336,71 +2378,6 @@ app.post("/api/fix-color-images/:id", (req, res) => {
   );
 });
 
-// ─── API Routes - Register AFTER middleware ──────────────────────────────────
-app.use("/api/admin", loginRoutes);
-app.use('/api/packages', packageRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/categories", categoryRoutes);
-app.use("/api/customers", userRoutes);
-app.use('/api/addons', addonRoutes);
-app.use("/api/customers", customerRoutes);
-app.use("/api/hero-banners", heroBannersRoutes);
-app.use("/api/testimonials", testimonialsRoutes);
-app.use("/api/why-choose-us", whyChooseUsRoutes);
-app.use("/api", cartRoutes);
-app.use("/api/orders", orderRoutes);
-app.use("/api/invoice", invoiceRoutes);
-app.use("/api/salesman", salesmanRoutes);
-app.use("/api", notificationRoutes);
-app.use("/api/salesman-orders", salesmanOrderRoutes);
-
-// ─── NEW: Customer Profile Routes ─────────────────────────────────────────────
-// GET /api/customers/profile/:id - Get customer profile
-// PUT /api/customers/:id - Update customer profile
-// POST /api/customers/:id/profile-image - Upload profile image
-// GET /api/customers/me - Get current user (with token)
-app.use("/api/customers", customerProfileRoutes);
-
-// ─── CUSTOMER ORDER ROUTES ─────────────────────────────────────────────────────
-app.use("/api/customer-orders", customerOrderRoutes);
-
-// ─── COUPON ROUTES ─────────────────────────────────────────────────────────────
-app.use("/api", couponRoutes);
-
-// ─── CHECKOUT ROUTES ──────────────────────────────────────────────────────────
-app.use("/api/checkout", checkoutRoutes);
-
-// ─── WISHLIST ROUTES ──────────────────────────────────────────────────────────
-app.use("/api/wishlist", wishlistRoutes);
-
-// ─── Route to check if an image exists ──────────────────────────────────────
-app.get("/api/check-image/:filename", (req, res) => {
-  const filename = req.params.filename;
-  const imagePath = path.join(__dirname, "uploads/products", filename);
-  
-  if (fs.existsSync(imagePath)) {
-    res.json({ exists: true, path: `/uploads/products/${filename}` });
-  } else {
-    res.json({ exists: false, message: "Image not found" });
-  }
-});
-
-// ─── Route to list all images in products folder ────────────────────────────
-app.get("/api/list-images", (req, res) => {
-  const productsPath = path.join(__dirname, "uploads/products");
-  
-  if (fs.existsSync(productsPath)) {
-    const files = fs.readdirSync(productsPath);
-    res.json({ 
-      count: files.length, 
-      files: files,
-      path: "/uploads/products/"
-    });
-  } else {
-    res.json({ count: 0, files: [], message: "Products folder not found" });
-  }
-});
-
 // ─── Error handling middleware ────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err);
@@ -2416,92 +2393,50 @@ app.use((req, res) => {
   res.status(404).json({ 
     message: 'Route not found',
     path: req.url,
-    availableEndpoints: [
-      "/api/test",
-      "/api/products",
-      "/api/products/category/:categoryId",
-      "/api/products/trending",
-      "/api/products/best-sellers",
-      "/api/products/new-arrivals",
-      "/api/products/search",
-      "/api/products/:id",
-      "/api/categories",
-      "/api/categories/:id",
-      "/api/cart/:customerId",
-      "/api/cart",
-      "/api/cart/item",
-      "/api/wishlist/:customerId",
-      "/api/wishlist/add",
-      "/api/wishlist/remove",
-      "/api/check-image/:filename",
-      "/api/list-images",
-      "/api/debug/product/:id",
-      "/api/debug/description/:id",
-      "/api/fix-color-images/:id (POST)",
-      "/api/checkout/orders/all",
-      "/api/customer-orders",
-      "/api/customer-orders/customer/:customerId",
-      "/api/customer-orders/:id",
-      "/api/customer-orders/:id/status",
-      "/api/customer-orders/:id/status-payment",
-      "/api/coupons/active",
-      "/api/coupons/validate",
-      "/api/coupons/apply",
-      "/api/admin/coupons",
-      "/api/customers/profile/:id",
-      "/api/customers/:id (PUT)",
-      "/api/customers/:id/profile-image (POST)",
-      "/api/customers/me (GET)"
-    ]
+    availableEndpoints: {
+      auth: [
+        "POST /api/auth/register - Register new user",
+        "POST /api/auth/login - Login user", 
+        "POST /api/auth/verify-otp - Verify OTP",
+        "POST /api/auth/resend-otp - Resend OTP"
+      ],
+      customers: [
+        "POST /api/customers/register - Register (alternate)",
+        "POST /api/customers/login - Login (alternate)",
+        "GET /api/customers/profile/:id - Get profile",
+        "PUT /api/customers/:id - Update profile",
+        "POST /api/customers/:id/profile-image - Upload photo",
+        "GET /api/customers/me - Get current user"
+      ],
+      products: [
+        "GET /api/products - Get all products",
+        "GET /api/products/:id - Get single product",
+        "GET /api/products/category/:categoryId - Get by category"
+      ],
+      other: [
+        "GET /api/test - Test API",
+        "GET /api/categories - Get all categories",
+        "GET /api/cart/:customerId - Get cart",
+        "GET /api/wishlist/:customerId - Get wishlist"
+      ]
+    }
   });
 });
 
 // ─── Start server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`\n🚀 Server running on port ${PORT}`);
   console.log(`📍 Local: http://localhost:${PORT}`);
-  console.log(`📍 Uploads: http://localhost:${PORT}/uploads/`);
-  console.log(`📍 Uploads Products: http://localhost:${PORT}/uploads/products/`);
-  console.log(`📍 Uploads Profiles: http://localhost:${PORT}/uploads/profiles/`);
-  console.log(`📁 Uploads directory: ${uploadPath}`);
-  console.log(`📁 Profiles directory: ${profilesPath}`);
-  console.log(`\n📋 API Endpoints:`);
-  console.log(`   - Test: GET /api/test`);
-  console.log(`   - Products: GET /api/products`);
-  console.log(`   - Products by Category: GET /api/products/category/:id`);
-  console.log(`   - Categories: GET /api/categories`);
-  console.log(`   - Register: POST /api/customers/register`);
-  console.log(`   - Login: POST /api/customers/login`);
-  console.log(`   - Get Profile: GET /api/customers/profile/:id`);
-  console.log(`   - Update Profile: PUT /api/customers/:id`);
-  console.log(`   - Upload Profile Image: POST /api/customers/:id/profile-image`);
-  console.log(`   - Get Current User: GET /api/customers/me`);
-  console.log(`   - Cart: GET /api/cart/:customerId`);
-  console.log(`   - Cart: POST /api/cart`);
-  console.log(`   - Cart: PUT /api/cart`);
-  console.log(`   - Cart: DELETE /api/cart/item`);
-  console.log(`   - Wishlist: GET /api/wishlist/:customerId`);
-  console.log(`   - Wishlist: POST /api/wishlist/add`);
-  console.log(`   - Wishlist: DELETE /api/wishlist/remove`);
-  console.log(`   - Check Image: GET /api/check-image/:filename`);
-  console.log(`   - List Images: GET /api/list-images`);
-  console.log(`   - Debug Product: GET /api/debug/product/:id`);
-  console.log(`   - Debug Description: GET /api/debug/description/:id`);
-  console.log(`   - Fix Color Images: POST /api/fix-color-images/:id`);
-  console.log(`   - Customer Orders: GET /api/customer-orders`);
-  console.log(`   - Customer Orders by Customer: GET /api/customer-orders/customer/:customerId`);
-  console.log(`   - Single Order: GET /api/customer-orders/:id`);
-  console.log(`   - Update Order Status: PUT /api/customer-orders/:id/status`);
-  console.log(`   - Update Status & Payment: PUT /api/customer-orders/:id/status-payment`);
-  console.log(`   - Active Coupons: GET /api/coupons/active`);
-  console.log(`   - Validate Coupon: POST /api/coupons/validate`);
-  console.log(`   - Apply Coupon: POST /api/coupons/apply`);
-  console.log(`   - Admin Coupons: GET /api/admin/coupons`);
-  console.log(`\n📁 Static Files:`);
-  console.log(`   - Uploads: http://localhost:${PORT}/uploads/`);
-  console.log(`   - Products: http://localhost:${PORT}/uploads/products/`);
-  console.log(`   - Categories: http://localhost:${PORT}/uploads/categories/`);
-  console.log(`   - PDFs: http://localhost:${PORT}/uploads/pdfs/`);
-  console.log(`   - Profiles: http://localhost:${PORT}/uploads/profiles/`);
+  console.log(`\n🔐 AUTH ENDPOINTS (via /api/auth):`);
+  console.log(`   ──────────────────────────────────────`);
+  console.log(`   POST /api/auth/register        - Register new user`);
+  console.log(`   POST /api/auth/login           - Login user`);
+  console.log(`   POST /api/auth/verify-otp      - Verify OTP`);
+  console.log(`   POST /api/auth/resend-otp      - Resend OTP`);
+  console.log(`   ──────────────────────────────────────`);
+  console.log(`   POST /api/customers/register   - Register (alternate)`);
+  console.log(`   POST /api/customers/login      - Login (alternate)`);
+  console.log(`   ──────────────────────────────────────`);
+  console.log(`\n📁 Static Files: http://localhost:${PORT}/uploads/`);
 });
