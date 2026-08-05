@@ -2049,8 +2049,11 @@ const addonRoutes = require('./routes/addons');
 const checkoutRoutes = require("./routes/checkout");
 const customerOrderRoutes = require("./routes/customerOrderRoutes");
 
+
 // ─── NEW: Customer Profile Routes ──────────────────────────────────────────────
 const customerProfileRoutes = require("./routes/customerProfileRoutes");
+
+const salesmanOrderRoutes = require("./routes/salesmanOrderRoutes");
 
 const app = express();
 
@@ -2349,6 +2352,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/invoice", invoiceRoutes);
 app.use("/api/salesman", salesmanRoutes);
 app.use("/api", notificationRoutes);
+app.use("/api/salesman-orders", salesmanOrderRoutes);
 
 // ─── NEW: Customer Profile Routes ─────────────────────────────────────────────
 // GET /api/customers/profile/:id - Get customer profile

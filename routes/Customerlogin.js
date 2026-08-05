@@ -620,5 +620,95 @@ router.put("/update-address/:id", async (req, res) => {
 });
 
 
+// GET - Fetch all customers
+router.get("/", (req, res) => {
+  const sql = `
+    SELECT
+      id,
+      name,
+      email,
+      phone,
+      is_verified,
+      address_line1,
+      address_line2,
+      city,
+      state,
+      pincode,
+      country,
+      avatar,
+      created_at,
+      updated_at
+    FROM customers
+    ORDER BY id DESC
+  `;
+
+  db.query(sql, (err, result) => {
+    if (err) {
+      console.error("Error fetching customers:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch customers",
+        error: err.message,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Customers fetched successfully",
+      count: result.length,
+      data: result,
+    });
+  });
+});
+
+
+// GET - Fetch customer by ID
+// GET CUSTOMER DETAILS BY ID
+router.get("/details/:id", (req, res) => {
+  const { id } = req.params;
+
+  const sql = `
+    SELECT
+      id,
+      name,
+      email,
+      phone,
+      is_verified,
+      address_line1,
+      address_line2,
+      city,
+      state,
+      pincode,
+      country,
+      avatar,
+      created_at,
+      updated_at
+    FROM customers
+    WHERE id = ?
+  `;
+
+  db.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch customer",
+      });
+    }
+
+    if (result.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Customer fetched successfully",
+      data: result[0],
+    });
+  });
+});
 
 module.exports = router;
