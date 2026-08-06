@@ -1117,6 +1117,8 @@ router.put("/address/default/:addressId", async (req, res) => {
 });
 
 // ─── CREATE ORDER ──────────────────────────────────────────────────────────────
+// routes/checkout.js - Update the CREATE ORDER endpoint
+
 router.post("/order", async (req, res) => {
   try {
     const {
@@ -1138,11 +1140,16 @@ router.post("/order", async (req, res) => {
       couponDiscount,
       couponCode,
       grandTotal,
+      total, // ✅ Add this - the total field from frontend
+      advanceAmount, // ✅ Add this
       paymentMethod,
       notes
     } = req.body;
 
     console.log("📦 Creating order for customer:", customerId);
+    console.log("📦 Total received:", total);
+    console.log("📦 Grand Total received:", grandTotal);
+    console.log("📦 Advance Amount received:", advanceAmount);
 
     if (!customerId || !address || !eventDate || !items || !grandTotal) {
       console.error("❌ Missing required fields:", { customerId, address, eventDate, items, grandTotal });
@@ -1157,7 +1164,7 @@ router.post("/order", async (req, res) => {
 
     console.log("📦 Address object:", JSON.stringify(address, null, 2));
 
-    // Insert order using your existing table structure
+    // Insert order with ALL fields including total
     const result = await query(
       `INSERT INTO orders (
         order_number, customer_id, customer_name, customer_email, customer_phone,
@@ -1166,9 +1173,9 @@ router.post("/order", async (req, res) => {
         address_pincode, address_country, event_date, event_time,
         event_type, venue, guest_count, special_instructions,
         items, subtotal, delivery_charge, gst, coupon_discount,
-        coupon_code, grand_total, payment_method, payment_status,
+        coupon_code, grand_total, total, advance_amount, payment_method, payment_status,
         status, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         customerId,
@@ -1198,6 +1205,8 @@ router.post("/order", async (req, res) => {
         parseFloat(couponDiscount) || 0,
         couponCode || null,
         parseFloat(grandTotal) || 0,
+        parseFloat(total) || parseFloat(grandTotal) || 0, // ✅ Add total field
+        parseFloat(advanceAmount) || 0, // ✅ Add advance_amount field
         paymentMethod || null,
         'pending',
         'pending',
@@ -1239,6 +1248,8 @@ router.post("/order", async (req, res) => {
 });
 
 // ─── GET ORDERS BY CUSTOMER ──────────────────────────────────────────────────
+// routes/checkout.js - Update GET orders endpoints
+
 router.get("/orders/:customerId", async (req, res) => {
   try {
     const { customerId } = req.params;
@@ -1256,7 +1267,9 @@ router.get("/orders/:customerId", async (req, res) => {
 
     const parsedOrders = orders.map(order => ({
       ...order,
-      items: JSON.parse(order.items || '[]')
+      items: JSON.parse(order.items || '[]'),
+      total: order.total || order.grand_total || 0,
+      advance_amount: order.advance_amount || 0,
     }));
 
     res.json({
@@ -1266,6 +1279,46 @@ router.get("/orders/:customerId", async (req, res) => {
 
   } catch (error) {
     console.error("❌ GET ORDERS ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    });
+  }
+});
+
+router.get("/order/:orderNumber", async (req, res) => {
+  try {
+    const { orderNumber } = req.params;
+
+    console.log("📦 Fetching order by number:", orderNumber);
+
+    const order = await query(
+      `SELECT * FROM orders WHERE order_number = ?`,
+      [orderNumber]
+    );
+
+    if (order.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    const parsedOrder = {
+      ...order[0],
+      items: JSON.parse(order[0].items || '[]'),
+      total: order[0].total || order[0].grand_total || 0,
+      advance_amount: order[0].advance_amount || 0,
+    };
+
+    res.json({
+      success: true,
+      data: parsedOrder
+    });
+
+  } catch (error) {
+    console.error("❌ GET ORDER ERROR:", error);
     res.status(500).json({
       success: false,
       message: "Server error",
